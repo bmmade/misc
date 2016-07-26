@@ -1,0 +1,57 @@
+server {
+    listen 80;
+    server_name ~^www\.(?<domain>(\w+\.)+<%= @regex_name %>)$;
+    rewrite / $scheme://$domain$request_uri permanent;
+}
+
+server {
+
+
+    listen 80;
+    ## SSL directives might go here
+    server_name <%=  @aliases.join(" ") %>; 
+    root <%= @www_root %>;
+
+    location / {
+        try_files $uri @rewrite; # For Drupal <= 6
+    }
+
+    location @rewrite {
+        rewrite ^/(.*)$ /index.php?q=$1;
+    }
+
+    ## These locations would be hidden by .htaccess normally
+    location ^~ /includes/           { deny all; }
+
+    location  /. { ## Disable .htaccess and other hidden files
+        return 404;
+    }
+
+    location ~ .php/ { ## Forward paths like /js/index.php/x.js to relevant handler
+        rewrite ^(.*.php)/ $1 last;
+    }
+
+    location ~ .(php|inc)$ { ## Execute PHP scripts
+
+        fastcgi_param  DRUPAL_SITE_ENVIRONMENT <%= @drupal_site_environment %>; 
+
+        if (!-e $request_filename) { rewrite ^/(.*)$ /index.php?q=$1; } ## Catch 404s that try_files miss
+
+        expires        off; ## Do not cache dynamic content
+        fastcgi_pass   127.0.0.1:<%= @backend_port %>;
+#       fastcgi_param  HTTPS $fastcgi_https;
+        fastcgi_param  SCRIPT_FILENAME  $document_root$fastcgi_script_name;
+
+        include        fastcgi_params; ## See /etc/nginx/fastcgi_params
+    }
+    error_log /var/log/nginx/<%= @title %>-error.log;
+
+    # Enable gzip comression of responses
+    gzip             on;
+    #gzip_comp_level 9;
+    gzip_min_length  1000;
+    gzip_proxied     any;
+    gzip_vary        on;
+    gzip_types       text/plain application/xml application/xml+rss application/json text/html text/xml text/css text/js text/javascript application/x-javascript;
+
+}
